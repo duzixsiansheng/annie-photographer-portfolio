@@ -1,4 +1,215 @@
-<!DOCTYPE html>
+// 显示调试面板
+        function showDebugPanel() {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                z-index: 3000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow-y: auto;
+            `;
+            
+            const debugInfo = getDebugInfo();
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 2rem; border-radius: 15px; max-width: 80vw; max-height: 80vh; overflow-y: auto; width: 800px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <h2 style="color: #333;">🔧 系统调试面板</h2>
+                        <button onclick="this.closest('.modal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                        <!-- 系统状态 -->
+                        <div>
+                            <h3 style="color: #333; margin-bottom: 1rem;">📊 系统状态</h3>
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.9rem;">
+                                <div><strong>浏览器:</strong> ${debugInfo.browser}</div>
+                                <div><strong>LocalStorage 支持:</strong> ${debugInfo.localStorageSupported ? '✅' : '❌'}</div>
+                                <div><strong>FileReader 支持:</strong> ${debugInfo.fileReaderSupported ? '✅' : '❌'}</div>
+                                <div><strong>存储已用:</strong> ${debugInfo.storageUsed}</div>
+                                <div><strong>数据大小:</strong> ${debugInfo.dataSize}</div>
+                                <div><strong>照片数量:</strong> ${debugInfo.photoCount}</div>
+                                <div><strong>最后更新:</strong> ${debugInfo.lastUpdate}</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 错误日志 -->
+                        <div>
+                            <h3 style="color: #333; margin-bottom: 1rem;">🚨 最近错误 (${errorLog.logs.filter(log => log.level === 'error').length})</h3>
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+                                ${errorLog.logs.slice(-5).reverse().map(log => `
+                                    <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: ${log.level === 'error' ? '#f8d7da' : log.level === 'warning' ? '#fff3cd' : '#d1ecf1'}; border-radius: 4px;">
+                                        <div style="font-weight: bold;">[${log.level.toUpperCase()}] ${log.timestamp.split('T')[1].split('.')[0]}</div>
+                                        <div>${log.message}</div>
+                                    </div>
+                                `).join('') || '<div style="color: #6c757d;">暂无日志记录</div>'}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 存储信息 -->
+                    <div style="margin-top: 2rem;">
+                        <h3 style="color: #333; margin-bottom: 1rem;">💾 存储详情</h3>
+                        <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; max-height: 200px; overflow-y: auto;">
+                            ${debugInfo.storageDetails}
+                        </div>
+                    </div>
+                    
+                    <!-- 操作按钮 -->
+                    <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button onclick="runDiagnostics()" style="background: #007bff; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🔍 运行诊断</button>
+                        <button onclick="clearAllData()" style="background: #dc3545; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🗑️ 清除所有数据</button>
+                        <button onclick="errorLog.clear(); showMessage('日志已清除', 'success')" style="background: #ffc107; color: black; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🧹 清除日志</button>
+                        <button onclick="errorLog.export()" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">📥 导出日志</button>
+                        <button onclick="testUpload()" style="background: #17a2b8; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">🧪 测试上传</button>
+                    </div>
+                </div>
+            `;
+            
+            modal.onclick = (e) => {
+                if (e.target === modal) modal.remove();
+            };
+            
+            document.body.appendChild(modal);
+        }
+
+        // 获取调试信息
+        function getDebugInfo() {
+            const photosDataString = localStorage.getItem('photographerPhotos') || '[]';
+            const photosArray = JSON.parse(photosDataString);
+            
+            // 获取存储空间信息
+            let storageUsed = 'Unknown';
+            let storageDetails = '';
+            
+            try {
+                let totalSize = 0;
+                for (let key in localStorage) {
+                    if (localStorage.hasOwnProperty(key)) {
+                        const size = localStorage.getItem(key).length;
+                        totalSize += size;
+                        storageDetails += `${key}: ${(size / 1024).toFixed(2)} KB\n`;
+                    }
+                }
+                storageUsed = `${(totalSize / 1024).toFixed(2)} KB`;
+            } catch (e) {
+                storageDetails = 'Error accessing localStorage';
+            }
+            
+            return {
+                browser: navigator.userAgent,
+                localStorageSupported: typeof(Storage) !== "undefined",
+                fileReaderSupported: typeof(FileReader) !== "undefined",
+                storageUsed,
+                dataSize: `${(photosDataString.length / 1024).toFixed(2)} KB`,
+                photoCount: photosArray.length,
+                lastUpdate: photosArray.length > 0 ? 
+                    new Date(Math.max(...photosArray.map(p => new Date(p.uploadDate)))).toLocaleString() : 
+                    '无数据',
+                storageDetails
+            };
+        }
+
+        // 运行诊断
+        async function runDiagnostics() {
+            errorLog.add('info', '开始系统诊断');
+            
+            const diagnostics = [];
+            
+            // 检查 localStorage
+            try {
+                const testKey = 'diagnostic_test';
+                localStorage.setItem(testKey, 'test');
+                localStorage.removeItem(testKey);
+                diagnostics.push('✅ localStorage 读写正常');
+            } catch (e) {
+                diagnostics.push('❌ localStorage 访问失败: ' + e.message);
+            }
+            
+            // 检查 FileReader
+            try {
+                const reader = new FileReader();
+                diagnostics.push('✅ FileReader API 可用');
+            } catch (e) {
+                diagnostics.push('❌ FileReader API 不可用: ' + e.message);
+            }
+            
+            // 检查存储空间
+            if (navigator.storage && navigator.storage.estimate) {
+                try {
+                    const estimate = await navigator.storage.estimate();
+                    const usedMB = (estimate.usage / 1024 / 1024).toFixed(2);
+                    const quotaMB = (estimate.quota / 1024 / 1024).toFixed(2);
+                    diagnostics.push(`✅ 存储空间: 已用 ${usedMB}MB / 总计 ${quotaMB}MB`);
+                } catch (e) {
+                    diagnostics.push('❌ 无法获取存储空间信息: ' + e.message);
+                }
+            } else {
+                diagnostics.push('⚠️ 浏览器不支持存储空间查询');
+            }
+            
+            // 检查数据完整性
+            try {
+                const data = JSON.parse(localStorage.getItem('photographerPhotos') || '[]');
+                const validPhotos = data.filter(photo => 
+                    photo.id && photo.title && photo.category && photo.imageUrl
+                ).length;
+                diagnostics.push(`✅ 数据完整性: ${validPhotos}/${data.length} 张照片有效`);
+            } catch (e) {
+                diagnostics.push('❌ 数据解析失败: ' + e.message);
+            }
+            
+            // 显示诊断结果
+            alert('🔍 系统诊断结果:\n\n' + diagnostics.join('\n'));
+            
+            errorLog.add('info', '系统诊断完成', { results: diagnostics });
+        }
+
+        // 清除所有数据
+        function clearAllData() {
+            if (!confirm('⚠️ 警告：这将删除所有照片和数据，此操作不可恢复！\n\n确定要继续吗？')) {
+                return;
+            }
+            
+            if (!confirm('🚨 最后确认：所有数据将被永久删除！\n\n请再次确认：')) {
+                return;
+            }
+            
+            try {
+                localStorage.removeItem('photographerPhotos');
+                localStorage.removeItem('frontendPhotos');
+                localStorage.removeItem('adminErrorLogs');
+                
+                photosData = [];
+                errorLog.logs = [];
+                
+                loadPhotos();
+                updateStats();
+                
+                errorLog.add('info', '所有数据已清除');
+                showMessage('所有数据已清除', 'success');
+                
+                // 关闭调试面板
+                document.querySelector('.modal')?.remove();
+                
+            } catch (e) {
+                errorLog.add('error', '清除数据失败', { error: e.message });
+                showMessage('清除数据失败: ' + e.message, 'error');
+            }
+        }
+
+        // 测试上传功能
+        function testUpload() {
+            errorLog.add('info', '开始测试上传功能');
+            
+            // 创建一个测试图片 (1x1 像素的 PNG)
+            const testImageData = 'data:image/png;base64,iVBORw0KGgoAAAANSUhE<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -478,6 +689,7 @@
         <h1>📸 摄影作品管理后台</h1>
         <div class="nav-buttons">
             <a href="#" class="nav-btn" onclick="viewFrontend()">🌐 查看前端</a>
+            <a href="#" class="nav-btn" onclick="showDebugPanel()">🔧 调试面板</a>
             <a href="#" class="nav-btn" onclick="exportData()">📤 导出数据</a>
             <a href="#" class="nav-btn" onclick="showSettings()">⚙️ 设置</a>
         </div>
@@ -642,11 +854,176 @@
             handleFileSelect(event);
         }
 
+        // 错误日志系统
+        const errorLog = {
+            logs: [],
+            add: function(level, message, details = null) {
+                const timestamp = new Date().toISOString();
+                const logEntry = {
+                    timestamp,
+                    level,
+                    message,
+                    details,
+                    userAgent: navigator.userAgent,
+                    url: window.location.href
+                };
+                
+                this.logs.push(logEntry);
+                console.log(`[${level.toUpperCase()}] ${timestamp}: ${message}`, details);
+                
+                // 保存到 localStorage
+                localStorage.setItem('adminErrorLogs', JSON.stringify(this.logs));
+                
+                // 如果是错误级别，显示错误面板
+                if (level === 'error') {
+                    this.showErrorPanel(logEntry);
+                }
+            },
+            
+            clear: function() {
+                this.logs = [];
+                localStorage.removeItem('adminErrorLogs');
+                document.getElementById('error-panel')?.remove();
+            },
+            
+            export: function() {
+                const dataStr = JSON.stringify(this.logs, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'admin-error-logs-' + new Date().toISOString().split('T')[0] + '.json';
+                link.click();
+                
+                URL.revokeObjectURL(url);
+            },
+            
+            showErrorPanel: function(logEntry) {
+                // 移除已存在的错误面板
+                document.getElementById('error-panel')?.remove();
+                
+                const errorPanel = document.createElement('div');
+                errorPanel.id = 'error-panel';
+                errorPanel.style.cssText = `
+                    position: fixed;
+                    top: 80px;
+                    right: 20px;
+                    background: #f8d7da;
+                    color: #721c24;
+                    border: 1px solid #f5c6cb;
+                    border-radius: 10px;
+                    padding: 1rem;
+                    max-width: 400px;
+                    z-index: 2000;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                `;
+                
+                errorPanel.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>❌ 操作失败</strong>
+                        <button onclick="document.getElementById('error-panel').remove()" style="background: none; border: none; font-size: 18px; cursor: pointer;">&times;</button>
+                    </div>
+                    <div style="font-size: 0.9rem; margin-bottom: 0.5rem;">${logEntry.message}</div>
+                    <div style="font-size: 0.8rem; color: #6c757d;">${logEntry.timestamp}</div>
+                    <div style="margin-top: 0.5rem;">
+                        <button onclick="errorLog.showDetailedError('${logEntry.timestamp}')" style="background: #dc3545; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 5px; font-size: 0.8rem; cursor: pointer;">查看详情</button>
+                        <button onclick="errorLog.export()" style="background: #6c757d; color: white; border: none; padding: 0.3rem 0.8rem; border-radius: 5px; font-size: 0.8rem; cursor: pointer; margin-left: 0.5rem;">导出日志</button>
+                    </div>
+                `;
+                
+                document.body.appendChild(errorPanel);
+                
+                // 5秒后自动隐藏
+                setTimeout(() => {
+                    errorPanel.style.opacity = '0';
+                    errorPanel.style.transform = 'translateX(100%)';
+                    errorPanel.style.transition = 'all 0.3s ease';
+                    setTimeout(() => errorPanel.remove(), 300);
+                }, 5000);
+            },
+            
+            showDetailedError: function(timestamp) {
+                const logEntry = this.logs.find(log => log.timestamp === timestamp);
+                if (!logEntry) return;
+                
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.7);
+                    z-index: 3000;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+                
+                modal.innerHTML = `
+                    <div style="background: white; padding: 2rem; border-radius: 15px; max-width: 600px; max-height: 80vh; overflow-y: auto;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h3 style="color: #dc3545;">🔍 错误详情</h3>
+                            <button onclick="this.closest('.modal').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+                        </div>
+                        <div style="font-family: monospace; background: #f8f9fa; padding: 1rem; border-radius: 5px; white-space: pre-wrap; font-size: 0.9rem;">
+时间: ${logEntry.timestamp}
+级别: ${logEntry.level.toUpperCase()}
+消息: ${logEntry.message}
+浏览器: ${logEntry.userAgent}
+页面: ${logEntry.url}
+
+详细信息:
+${JSON.stringify(logEntry.details, null, 2)}
+                        </div>
+                        <div style="margin-top: 1rem; text-align: right;">
+                            <button onclick="navigator.clipboard.writeText(JSON.stringify(${JSON.stringify(logEntry)}, null, 2))" style="background: #28a745; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; margin-right: 0.5rem;">复制到剪贴板</button>
+                            <button onclick="this.closest('.modal').remove()" style="background: #6c757d; color: white; border: none; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer;">关闭</button>
+                        </div>
+                    </div>
+                `;
+                
+                modal.onclick = (e) => {
+                    if (e.target === modal) modal.remove();
+                };
+                
+                document.body.appendChild(modal);
+            }
+        };
+
+        // 加载已有的错误日志
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedLogs = localStorage.getItem('adminErrorLogs');
+            if (savedLogs) {
+                errorLog.logs = JSON.parse(savedLogs);
+            }
+        });
+
+        // 文件验证函数
+        function validateFile(file) {
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+            
+            if (!allowedTypes.includes(file.type)) {
+                throw new Error(`不支持的文件格式: ${file.type}。支持的格式: JPG, PNG, WebP, GIF`);
+            }
+            
+            if (file.size > maxSize) {
+                throw new Error(`文件过大: ${(file.size / 1024 / 1024).toFixed(2)}MB。最大支持: 10MB`);
+            }
+            
+            return true;
+        }
+
         // 处理上传
         async function handleUpload(event) {
             event.preventDefault();
             
+            errorLog.add('info', '开始上传流程');
+            
             if (selectedFiles.length === 0) {
+                errorLog.add('warning', '用户未选择文件');
                 showMessage('请选择至少一张照片', 'error');
                 return;
             }
@@ -663,36 +1040,130 @@
             const category = formData.get('category');
             const description = formData.get('description');
             
+            errorLog.add('info', '表单数据获取成功', {
+                title,
+                category,
+                description,
+                fileCount: selectedFiles.length
+            });
+            
             try {
+                // 验证表单数据
+                if (!title || title.trim().length === 0) {
+                    throw new Error('标题不能为空');
+                }
+                
+                if (!category) {
+                    throw new Error('请选择作品分类');
+                }
+                
+                if (title.length > 100) {
+                    throw new Error('标题过长，请控制在100字符以内');
+                }
+                
+                // 验证所有文件
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    try {
+                        validateFile(selectedFiles[i]);
+                        errorLog.add('info', `文件验证通过: ${selectedFiles[i].name}`);
+                    } catch (fileError) {
+                        errorLog.add('error', `文件验证失败: ${selectedFiles[i].name}`, {
+                            fileName: selectedFiles[i].name,
+                            fileSize: selectedFiles[i].size,
+                            fileType: selectedFiles[i].type,
+                            error: fileError.message
+                        });
+                        throw new Error(`文件 "${selectedFiles[i].name}" 验证失败: ${fileError.message}`);
+                    }
+                }
+                
                 // 模拟上传过程
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                errorLog.add('info', '开始处理文件...');
+                await new Promise(resolve => setTimeout(resolve, 1000));
                 
                 // 处理每个文件
                 for (let i = 0; i < selectedFiles.length; i++) {
                     const file = selectedFiles[i];
-                    const reader = new FileReader();
+                    errorLog.add('info', `处理文件 ${i + 1}/${selectedFiles.length}: ${file.name}`);
                     
-                    await new Promise((resolve) => {
-                        reader.onload = function(e) {
-                            const photoData = {
-                                id: Date.now() + i,
-                                title: selectedFiles.length > 1 ? `${title} (${i + 1})` : title,
-                                category: category,
-                                description: description,
-                                imageUrl: e.target.result,
-                                uploadDate: new Date().toISOString(),
-                                fileName: file.name
+                    try {
+                        const imageUrl = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            
+                            reader.onload = function(e) {
+                                errorLog.add('info', `文件读取成功: ${file.name}`, {
+                                    dataUrlLength: e.target.result.length
+                                });
+                                resolve(e.target.result);
                             };
                             
-                            photosData.push(photoData);
-                            resolve();
+                            reader.onerror = function() {
+                                const errorMsg = `文件读取失败: ${file.name}`;
+                                errorLog.add('error', errorMsg, {
+                                    fileName: file.name,
+                                    error: reader.error
+                                });
+                                reject(new Error(errorMsg));
+                            };
+                            
+                            reader.readAsDataURL(file);
+                        });
+                        
+                        const photoData = {
+                            id: Date.now() + i,
+                            title: selectedFiles.length > 1 ? `${title} (${i + 1})` : title,
+                            category: category,
+                            description: description,
+                            imageUrl: imageUrl,
+                            uploadDate: new Date().toISOString(),
+                            fileName: file.name,
+                            fileSize: file.size,
+                            fileType: file.type
                         };
-                        reader.readAsDataURL(file);
-                    });
+                        
+                        photosData.push(photoData);
+                        errorLog.add('info', `照片数据创建成功: ${photoData.title}`, {
+                            id: photoData.id,
+                            fileName: photoData.fileName
+                        });
+                        
+                    } catch (fileProcessError) {
+                        errorLog.add('error', `处理文件失败: ${file.name}`, {
+                            fileName: file.name,
+                            error: fileProcessError.message,
+                            stack: fileProcessError.stack
+                        });
+                        throw fileProcessError;
+                    }
                 }
                 
                 // 保存到 localStorage
-                localStorage.setItem('photographerPhotos', JSON.stringify(photosData));
+                try {
+                    const dataToSave = JSON.stringify(photosData);
+                    localStorage.setItem('photographerPhotos', dataToSave);
+                    errorLog.add('info', `数据保存成功，共 ${photosData.length} 张照片`);
+                } catch (storageError) {
+                    errorLog.add('error', 'localStorage 保存失败', {
+                        error: storageError.message,
+                        dataSize: JSON.stringify(photosData).length,
+                        storageQuota: navigator.storage ? 'checking...' : 'unsupported'
+                    });
+                    
+                    // 检查存储空间
+                    if (navigator.storage && navigator.storage.estimate) {
+                        const estimate = await navigator.storage.estimate();
+                        errorLog.add('info', '存储空间信息', {
+                            quota: estimate.quota,
+                            usage: estimate.usage,
+                            available: estimate.quota - estimate.usage
+                        });
+                    }
+                    
+                    throw new Error('数据保存失败，可能是存储空间不足。请尝试删除一些旧照片或清理浏览器缓存。');
+                }
+                
+                // 同步到前端
+                syncToFrontend();
                 
                 // 重新加载页面数据
                 loadPhotos();
@@ -703,10 +1174,26 @@
                 selectedFiles = [];
                 document.getElementById('preview-container').innerHTML = '';
                 
-                showMessage('作品上传成功！', 'success');
+                errorLog.add('info', '上传流程完成');
+                showMessage(`作品上传成功！共处理 ${selectedFiles.length} 张照片`, 'success');
                 
             } catch (error) {
-                showMessage('上传失败，请重试', 'error');
+                errorLog.add('error', '上传失败', {
+                    error: error.message,
+                    stack: error.stack,
+                    formData: {
+                        title,
+                        category,
+                        description
+                    },
+                    selectedFilesInfo: selectedFiles.map(f => ({
+                        name: f.name,
+                        size: f.size,
+                        type: f.type
+                    }))
+                });
+                
+                showMessage(`上传失败: ${error.message}`, 'error');
             } finally {
                 // 恢复按钮状态
                 submitBtn.disabled = false;
